@@ -1,45 +1,48 @@
-name: FrotaNext - Testes de CI do Backend
+name: build-and-test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main", "master" ]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do repositório
-        uses: actions/checkout@v4
-      - name: Criar Rede Docker 
-        run: docker network create frota-network || true
+    - uses: actions/checkout@v4
 
-      - name: Iniciar os serviços (Docker Compose)
-        run: docker compose up -d --build
+    - name: Criar rede Docker externa (mock)
+      run: docker network create frota-network || true
 
-      - name: Aguardar o banco de dados (Postgres) ficar pronto
-        run: |
-          echo "Aguardando o banco de dados Postgres..."
-          until docker compose exec db pg_isready -U frota_next_user -d frota_next_db -q; do
-            echo "Postgres ainda não está pronto - aguardando..."
-            sleep 2
-          done
-          echo "Postgres está pronto!"
+    - name: Subir containers (Auth + DB)
+      run: docker compose up -d --build
 
-      - name: Rodar o Linter (Pylint)
-        run: |
-          echo "Rodando Pylint..."
-          # O "|| true" evita que avisos leves quebrem o build, remova se quiser ser rigoroso
-          docker compose exec backend pylint src/ || true
+    - name: Aguardar o banco de dados Postgres
+      run: |
+        echo "Aguardando o banco de dados Postgres..."
+        while ! docker compose exec -T db pg_isready -U frota_next_user -d frota_next_db; do
+          echo "Postgres ainda não está pronto - aguardando..."
+          sleep 2
+        done
+        echo "Postgres está pronto!"
 
-      - name: Rodar os testes de Integração
-        run: docker compose exec backend pytest -v -m integration
-        
-      - name: Rodar os testes Unitários
-        run: docker compose exec backend pytest -v -m unit
+    - name: Rodar Análise Estática (Pylint)
+      run: |
+        echo "Rodando Pylint..."
+        docker compose exec -T auth-service pylint src/
 
-      - name: Parar os contêineres (Limpeza)
-        if: always()
-        run: docker compose down
+    - name: Rodar Testes Unitários
+      run: |
+        echo "Rodando testes unitários..."
+        docker compose exec -T auth-service pytest -v -m unit
+
+    - name: Rodar Testes de Integração
+      run: |
+        echo "Rodando testes de integração..."
+        docker compose exec -T auth-service pytest -v -m integration
+
+    - name: Derrubar containers
+      if: always()
+      run: docker compose down -v
