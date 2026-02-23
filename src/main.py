@@ -10,17 +10,18 @@ from .routers import (
     empresa_router,
 )
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     print("Iniciando Auth Service...")
-    
+
     yield
-    
+
     print("Desligando Auth Service...")
 
 
 app = FastAPI(
-    title="FrotaNext Auth Service", 
+    title="FrotaNext Auth Service",
     description="API dedicada para autenticação e gestão de usuários da FrotaNext.",
     version="0.1.0",
     lifespan=lifespan,
@@ -44,6 +45,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def read_root():
